@@ -1,5 +1,5 @@
 
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxT7BpMCibxAvtqYmCsvaHHWrwifqdN0daX4iwYH2JtrJ_OY1DZs-IpcWGC2qo4spAi/exec';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxNksz9wzNh00mh4ZDzSi3dSjdTomaK-5sUqM0IDJvMjKuCnaM9j5sNVVIcOyyYdcB9/exec';
 
 // Данные приложения
 const saulData = {
@@ -292,3 +292,4 @@ async function testDatabase() {
         alert('❌ Ошибка: ' + error.message);
     }
 }
+
