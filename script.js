@@ -22,16 +22,14 @@ const saulData = {
     ]
 };
 
-// Инициализация при загрузке страницы
+// Инициализация
 document.addEventListener('DOMContentLoaded', function() {
     updateQuote();
     setInterval(updateQuote, 15000);
-    
-    // Обработчик формы
     document.getElementById('booking-form').addEventListener('submit', handleBooking);
 });
 
-// Обновление случайной цитаты
+// Обновление цитаты
 function updateQuote() {
     const sloganElement = document.getElementById('slogan');
     const quoteElement = document.getElementById('quote');
@@ -45,29 +43,25 @@ function updateQuote() {
 
 // Переключение секций
 function showSection(sectionId) {
-    // Скрыть все секции
     document.querySelectorAll('.content-section').forEach(section => {
         section.classList.remove('active');
     });
     
-    // Убрать активный класс со всех кнопок
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.classList.remove('active');
     });
     
-    // Показать выбранную секцию
     document.getElementById(sectionId).classList.add('active');
-    
-    // Активировать соответствующую кнопку
     event.target.classList.add('active');
 }
 
-// Обработка формы записи
+// Обработка формы
 async function handleBooking(event) {
     event.preventDefault();
     
     const formData = new FormData(event.target);
     const clientData = {
+        action: 'saveCase',
         name: formData.get('name'),
         phone: formData.get('phone'),
         email: formData.get('email') || 'не указан',
@@ -77,14 +71,12 @@ async function handleBooking(event) {
     };
 
     try {
-        // Показываем загрузку
         const submitBtn = event.target.querySelector('.submit-btn');
         const originalText = submitBtn.textContent;
-        submitBtn.textContent = '📨 Отправка Солу...';
+        submitBtn.textContent = '💾 Сохранение в базу...';
         submitBtn.disabled = true;
 
-        // Отправляем данные в Google Script
-        const success = await sendToTelegram(clientData);
+        const success = await saveCaseToDatabase(clientData);
         
         if (success) {
             showSuccessMessage(clientData.name, true);
@@ -92,90 +84,132 @@ async function handleBooking(event) {
             showSuccessMessage(clientData.name, false);
         }
         
-        // Сохраняем локально в любом случае
-        saveToLocalStorage(clientData);
         event.target.reset();
         
     } catch (error) {
-        console.error('Ошибка:', error);
-        // Сохраняем локально при любой ошибке
-        saveToLocalStorage(clientData);
         showSuccessMessage(clientData.name, false);
         event.target.reset();
     } finally {
-        // Восстанавливаем кнопку
         const submitBtn = event.target.querySelector('.submit-btn');
         submitBtn.textContent = '📅 Записаться на консультацию';
         submitBtn.disabled = false;
     }
 }
 
-// Отправка данных в Google Apps Script
-async function sendToTelegram(clientData) {
+// Сохранение дела в базу данных
+async function saveCaseToDatabase(clientData) {
     try {
-        console.log('📨 Отправляем данные в Google Script...', clientData);
-        
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(clientData)
         });
 
-        console.log('✅ Данные отправлены в Google Script');
-        return true;
+        const result = await response.json();
+        return result.success;
         
     } catch (error) {
-        console.error('❌ Ошибка отправки в Google Script:', error);
+        console.error('Ошибка сохранения:', error);
         return false;
     }
 }
 
-// Сохранение в localStorage
-function saveToLocalStorage(clientData) {
+// Получить ВСЕ дела (для админа)
+async function getAllCases() {
     try {
-        let clients = JSON.parse(localStorage.getItem('saulClients')) || [];
-        clientData.id = Date.now();
-        clients.push(clientData);
-        localStorage.setItem('saulClients', JSON.stringify(clients));
-        console.log('💾 Данные сохранены локально');
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: 'getCases'})
+        });
+
+        const result = await response.json();
+        return result.success ? result.cases : [];
+        
     } catch (error) {
-        console.error('Ошибка сохранения:', error);
+        console.error('Ошибка получения дел:', error);
+        return [];
     }
 }
 
-// Сообщение об успехе
-function showSuccessMessage(clientName, telegramSent) {
-    const message = telegramSent ? 
-        `✅ Заявка отправлена Солу!\n\nСпасибо, ${clientName}! Сол Гудман свяжется с вами в течение 2 часов.\n\nПомните: лучше позвонить Солу!` :
-        `✅ Заявка принята!\n\nСпасибо, ${clientName}! Мы сохранили вашу заявку.\n\nПомните: лучше позвонить Солу!`;
+// Получить дела по телефону (для клиентов)
+async function getCasesByPhone(phone) {
+    try {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action: 'getCasesByPhone',
+                phone: phone
+            })
+        });
 
-    alert(message);
+        const result = await response.json();
+        return result.success ? result.cases : [];
+        
+    } catch (error) {
+        console.error('Ошибка поиска:', error);
+        return [];
+    }
 }
 
-// Поиск дел по телефону
-function searchCases() {
+// Поиск дел
+async function searchCases() {
     const phone = document.getElementById('search-phone').value.trim();
     const resultsElement = document.getElementById('cases-results');
     
     if (!phone) {
-        resultsElement.innerHTML = '<p style="color: #F39C12;">Введите номер телефона для поиска.</p>';
+        resultsElement.innerHTML = '<p style="color: #F39C12;">Введите номер телефона</p>';
         return;
     }
     
-    const clients = JSON.parse(localStorage.getItem('saulClients')) || [];
-    const clientCases = clients.filter(client => client.phone === phone);
+    resultsElement.innerHTML = '<p>🔍 Поиск в общей базе...</p>';
     
-    if (clientCases.length === 0) {
+    const cases = await getCasesByPhone(phone);
+    
+    if (cases.length === 0) {
         resultsElement.innerHTML = `<p>Дела для телефона <strong>${phone}</strong> не найдены.</p>`;
         return;
     }
     
-    let resultsHTML = `<h4 style="color: #27AE60;">Найдено дел: ${clientCases.length}</h4>`;
+    displayCases(cases, resultsElement);
+}
+
+// Показать ВСЕ дела (для админа)
+async function showAllCases() {
+    const resultsElement = document.getElementById('cases-results');
+    resultsElement.innerHTML = '<p>📋 Загрузка всех дел из базы...</p>';
     
-    clientCases.forEach((caseItem, index) => {
-        resultsHTML += `
+    const allCases = await getAllCases();
+    
+    if (allCases.length === 0) {
+        resultsElement.innerHTML = '<p>В базе пока нет дел.</p>';
+        return;
+    }
+    
+    displayCases(allCases, resultsElement, true);
+}
+
+// Отображение дел
+function displayCases(cases, element, showAll = false) {
+    let html = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h4 style="color: #27AE60; margin: 0;">
+                ${showAll ? '📊 ВСЕ ДЕЛА В БАЗЕ' : '👤 НАЙДЕННЫЕ ДЕЛА'}: ${cases.length}
+            </h4>
+            <button onclick="exportToCSV(cases)" style="
+                background: #27AE60; 
+                color: white; 
+                border: none; 
+                padding: 5px 10px; 
+                border-radius: 5px; 
+                cursor: pointer;
+            ">📥 Экспорт</button>
+        </div>
+    `;
+    
+    cases.forEach((caseItem, index) => {
+        html += `
             <div class="case-item" style="
                 background: rgba(52, 73, 94, 0.7);
                 padding: 15px;
@@ -183,49 +217,78 @@ function searchCases() {
                 border-radius: 8px;
                 border-left: 4px solid #3498DB;
             ">
-                <strong>Дело #${index + 1}</strong><br>
+                <strong>Дело #${index + 1}</strong>
+                <span style="float: right; background: #E74C3C; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;">
+                    ${caseItem.status}
+                </span><br>
+                <strong>ID:</strong> ${caseItem.id}<br>
                 <strong>Клиент:</strong> ${caseItem.name}<br>
                 <strong>Телефон:</strong> ${caseItem.phone}<br>
                 <strong>Email:</strong> ${caseItem.email || 'не указан'}<br>
                 <strong>Тип дела:</strong> ${caseItem.caseType}<br>
-                <strong>Дата обращения:</strong> ${caseItem.timestamp}<br>
+                <strong>Дата:</strong> ${new Date(caseItem.timestamp).toLocaleString('ru-RU')}<br>
                 <strong>Описание:</strong> ${caseItem.description}
             </div>
         `;
     });
     
-    resultsElement.innerHTML = resultsHTML;
+    element.innerHTML = html;
 }
 
-// Экстренная помощь
+// Экспорт в CSV
+function exportToCSV(cases) {
+    let csv = 'Имя,Телефон,Email,Тип дела,Дата,Статус\n';
+    
+    cases.forEach(caseItem => {
+        csv += `"${caseItem.name}","${caseItem.phone}","${caseItem.email}","${caseItem.caseType}","${caseItem.timestamp}","${caseItem.status}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'дела_сола_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click();
+}
+
+// Сообщение об успехе
+function showSuccessMessage(clientName, success) {
+    const message = success ? 
+        `✅ Заявка сохранена в общей базе!\n\nСпасибо, ${clientName}! Сол Гудман свяжется с вами.\n\nПомните: лучше позвонить Солу!` :
+        `✅ Заявка принята!\n\nСпасибо, ${clientName}! Ваша заявка сохранена.\n\nПомните: лучше позвонить Солу!`;
+
+    alert(message);
+}
+
+// Остальные функции
 function emergencyHelp() {
-    alert('🚨 СРОЧНАЯ ПОМОЩЬ 🚨\n\nСол Гудман уже выезжает к вам!\n\nЧто делать до его приезда:\n• Ничего не подписывайте\n• Не давайте показания без адвоката\n• Сохраняйте спокойствие\n• Дождитесь Сола!\n\n📞 Телефон экстренной помощи: 505-123-HELP');
+    alert('🚨 СРОЧНАЯ ПОМОЩЬ! Звоните: 505-123-HELP');
 }
 
-// Имитация звонка
 function makeCall() {
-    alert('📞 Звонок\n\nНабор номера 505-503-4455...\n\nСол Гудман: "Алло! Слушаю вас!"\nРасскажите о вашей проблеме...');
+    alert('📞 Набор 505-503-4455...');
 }
 
-// Функция для тестирования Google Script
-async function testGoogleScript() {
+// Тест базы данных
+async function testDatabase() {
     const testData = {
+        action: 'saveCase',
         name: 'Тестовый Клиент',
         phone: '+79990001122',
         email: 'test@example.com',
-        caseType: 'Тестовая заявка',
-        description: 'Это тестовое сообщение для проверки Google Script',
+        caseType: 'Тест',
+        description: 'Тест общей базы данных',
         timestamp: new Date().toLocaleString('ru-RU')
     };
     
     try {
-        const success = await sendToTelegram(testData);
+        const success = await saveCaseToDatabase(testData);
         if (success) {
-            alert('✅ Тест пройден! Данные отправлены в Google Script.');
+            alert('✅ Тест базы пройден! Данные сохранены.');
         } else {
-            alert('❌ Тест не пройден. Проверьте консоль браузера (F12).');
+            alert('❌ Ошибка базы данных.');
         }
     } catch (error) {
-        alert('❌ Ошибка теста: ' + error.message);
+        alert('❌ Ошибка: ' + error.message);
     }
 }
