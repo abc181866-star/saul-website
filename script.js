@@ -1,8 +1,5 @@
-// Конфигурация - ЗАМЕНИТЕ ЭТИ ДАННЫЕ!
-const BOT_CONFIG = {
-    token: '8595705314:AAE3rgwRlEk9sLWk-Zyae2iYESdR_906bJw', // Например: '1234567890:ABCdef123...'
-    chatId: '1768475384'           // Например: '123456789'
-};
+
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxT7BpMCibxAvtqYmCsvaHHWrwifqdN0daX4iwYH2JtrJ_OY1DZs-IpcWGC2qo4spAi/exec';
 
 // Данные приложения
 const saulData = {
@@ -32,17 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Обработчик формы
     document.getElementById('booking-form').addEventListener('submit', handleBooking);
-    
-    // Проверяем конфигурацию
-    checkBotConfig();
 });
-
-// Проверка настроек бота
-function checkBotConfig() {
-    if (BOT_CONFIG.token.includes('ВАШ_ТОКЕН') || BOT_CONFIG.chatId.includes('ВАШ_CHAT_ID')) {
-        console.warn('⚠️ Настройте Telegram бота! Замените BOT_CONFIG в коде.');
-    }
-}
 
 // Обновление случайной цитаты
 function updateQuote() {
@@ -58,15 +45,20 @@ function updateQuote() {
 
 // Переключение секций
 function showSection(sectionId) {
+    // Скрыть все секции
     document.querySelectorAll('.content-section').forEach(section => {
         section.classList.remove('active');
     });
     
+    // Убрать активный класс со всех кнопок
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.classList.remove('active');
     });
     
+    // Показать выбранную секцию
     document.getElementById(sectionId).classList.add('active');
+    
+    // Активировать соответствующую кнопку
     event.target.classList.add('active');
 }
 
@@ -81,8 +73,7 @@ async function handleBooking(event) {
         email: formData.get('email') || 'не указан',
         caseType: formData.get('case-type'),
         description: formData.get('description'),
-        timestamp: new Date().toLocaleString('ru-RU'),
-        ip: await getClientIP()
+        timestamp: new Date().toLocaleString('ru-RU')
     };
 
     try {
@@ -92,20 +83,17 @@ async function handleBooking(event) {
         submitBtn.textContent = '📨 Отправка Солу...';
         submitBtn.disabled = true;
 
-        // Пытаемся отправить в Telegram
-        const telegramSuccess = await sendToTelegram(clientData);
+        // Отправляем данные в Google Script
+        const success = await sendToTelegram(clientData);
         
-        if (telegramSuccess) {
+        if (success) {
             showSuccessMessage(clientData.name, true);
-            // Сохраняем локально для истории
-            saveToLocalStorage(clientData);
         } else {
-            // Если Telegram не работает, сохраняем только локально
-            saveToLocalStorage(clientData);
             showSuccessMessage(clientData.name, false);
         }
         
-        // Очищаем форму
+        // Сохраняем локально в любом случае
+        saveToLocalStorage(clientData);
         event.target.reset();
         
     } catch (error) {
@@ -122,150 +110,57 @@ async function handleBooking(event) {
     }
 }
 
-// Получение IP клиента (для информации)
-async function getClientIP() {
-    try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        return data.ip;
-    } catch (error) {
-        return 'не удалось определить';
-    }
-}
-
-// Отправка в Telegram бот
+// Отправка данных в Google Apps Script
 async function sendToTelegram(clientData) {
-    // Проверяем настройки
-    if (BOT_CONFIG.token.includes('ВАШ_ТОКЕН') || BOT_CONFIG.chatId.includes('ВАШ_CHAT_ID')) {
-        console.warn('Telegram бот не настроен');
-        return false;
-    }
-
-    const message = `
-🆕 *НОВАЯ ЗАЯВКА ОТ КЛИЕНТА*
-
-👤 *Имя:* ${clientData.name}
-📞 *Телефон:* ${clientData.phone}
-📧 *Email:* ${clientData.email}
-⚖️ *Тип дела:* ${clientData.caseType}
-
-📝 *Описание:*
-${clientData.description}
-
-🌐 *IP:* ${clientData.ip}
-⏰ *Время:* ${clientData.timestamp}
-    `.trim();
-
     try {
-        const response = await fetch(`https://api.telegram.org/bot${BOT_CONFIG.token}/sendMessage`, {
+        console.log('📨 Отправляем данные в Google Script...', clientData);
+        
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                chat_id: BOT_CONFIG.chatId,
-                text: message,
-                parse_mode: 'Markdown'
-            })
+            body: JSON.stringify(clientData)
         });
 
-        const result = await response.json();
-        console.log('Telegram ответ:', result);
-        
-        return result.ok;
+        console.log('✅ Данные отправлены в Google Script');
+        return true;
         
     } catch (error) {
-        console.error('Ошибка отправки в Telegram:', error);
+        console.error('❌ Ошибка отправки в Google Script:', error);
         return false;
     }
 }
 
-// Резервное сохранение в localStorage
+// Сохранение в localStorage
 function saveToLocalStorage(clientData) {
     try {
         let clients = JSON.parse(localStorage.getItem('saulClients')) || [];
         clientData.id = Date.now();
         clients.push(clientData);
         localStorage.setItem('saulClients', JSON.stringify(clients));
-        console.log('Сохранено локально:', clientData);
+        console.log('💾 Данные сохранены локально');
     } catch (error) {
         console.error('Ошибка сохранения:', error);
     }
 }
 
-// Красивое сообщение об успехе
+// Сообщение об успехе
 function showSuccessMessage(clientName, telegramSent) {
     const message = telegramSent ? 
-        `✅ *Заявка отправлена Солу!*\n\nСпасибо, ${clientName}! Сол Гудман свяжется с вами в течение 2 часов.\n\n*Помните: лучше позвонить Солу!*` :
-        `✅ *Заявка принята!*\n\nСпасибо, ${clientName}! Мы сохранили вашу заявку. Сол свяжется с вами в ближайшее время.\n\n*Помните: лучше позвонить Солу!*`;
+        `✅ Заявка отправлена Солу!\n\nСпасибо, ${clientName}! Сол Гудман свяжется с вами в течение 2 часов.\n\nПомните: лучше позвонить Солу!` :
+        `✅ Заявка принята!\n\nСпасибо, ${clientName}! Мы сохранили вашу заявку.\n\nПомните: лучше позвонить Солу!`;
 
-    // Создаем красивый popup
-    const popup = document.createElement('div');
-    popup.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: ${telegramSent ? '#27AE60' : '#F39C12'};
-        color: white;
-        padding: 30px;
-        border-radius: 15px;
-        z-index: 10000;
-        text-align: center;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        border: 3px solid white;
-        max-width: 400px;
-        font-family: Arial, sans-serif;
-    `;
-    
-    popup.innerHTML = `
-        <div style="font-size: 48px; margin-bottom: 15px;">${telegramSent ? '✅' : '📝'}</div>
-        <h3 style="margin: 0 0 15px 0; color: white;">${telegramSent ? 'Заявка отправлена!' : 'Заявка принята!'}</h3>
-        <p style="margin: 10px 0; line-height: 1.5;">Спасибо, <strong>${clientName}</strong>!</p>
-        <p style="margin: 10px 0; line-height: 1.5;">${telegramSent ? 
-            'Сол Гудман свяжется с вами в течение 2 часов.' : 
-            'Мы сохранили вашу заявку. Сол свяжется с вами в ближайшее время.'
-        }</p>
-        <p style="margin: 15px 0; font-style: italic; font-size: 14px;">Помните: лучше позвонить Солу!</p>
-        <button onclick="this.parentElement.remove()" style="
-            background: white;
-            color: ${telegramSent ? '#27AE60' : '#F39C12'};
-            border: none;
-            padding: 10px 25px;
-            border-radius: 25px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 10px;
-        ">OK</button>
-    `;
-    
-    // Затемнение фона
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.7);
-        z-index: 9999;
-    `;
-    overlay.onclick = function() {
-        document.body.removeChild(overlay);
-        document.body.removeChild(popup);
-    };
-    
-    document.body.appendChild(overlay);
-    document.body.appendChild(popup);
+    alert(message);
 }
 
-// Поиск дел (только локальные)
+// Поиск дел по телефону
 function searchCases() {
     const phone = document.getElementById('search-phone').value.trim();
     const resultsElement = document.getElementById('cases-results');
     
     if (!phone) {
-        resultsElement.innerHTML = '<p style="color: #F39C12;">Пожалуйста, введите номер телефона для поиска.</p>';
+        resultsElement.innerHTML = '<p style="color: #F39C12;">Введите номер телефона для поиска.</p>';
         return;
     }
     
@@ -291,7 +186,7 @@ function searchCases() {
                 <strong>Дело #${index + 1}</strong><br>
                 <strong>Клиент:</strong> ${caseItem.name}<br>
                 <strong>Телефон:</strong> ${caseItem.phone}<br>
-                <strong>Email:</strong> ${caseItem.email}<br>
+                <strong>Email:</strong> ${caseItem.email || 'не указан'}<br>
                 <strong>Тип дела:</strong> ${caseItem.caseType}<br>
                 <strong>Дата обращения:</strong> ${caseItem.timestamp}<br>
                 <strong>Описание:</strong> ${caseItem.description}
@@ -312,25 +207,25 @@ function makeCall() {
     alert('📞 Звонок\n\nНабор номера 505-503-4455...\n\nСол Гудман: "Алло! Слушаю вас!"\nРасскажите о вашей проблеме...');
 }
 
-// Тест бота (для проверки)
-async function testBot() {
-    if (confirm('Отправить тестовое сообщение в Telegram?')) {
-        const testData = {
-            name: 'Тестовый Клиент',
-            phone: '+79990001122',
-            email: 'test@example.com',
-            caseType: 'Тестовая заявка',
-            description: 'Это тестовая заявка для проверки бота',
-            timestamp: new Date().toLocaleString('ru-RU'),
-            ip: '127.0.0.1'
-        };
-        
+// Функция для тестирования Google Script
+async function testGoogleScript() {
+    const testData = {
+        name: 'Тестовый Клиент',
+        phone: '+79990001122',
+        email: 'test@example.com',
+        caseType: 'Тестовая заявка',
+        description: 'Это тестовое сообщение для проверки Google Script',
+        timestamp: new Date().toLocaleString('ru-RU')
+    };
+    
+    try {
         const success = await sendToTelegram(testData);
         if (success) {
-            alert('✅ Тестовое сообщение отправлено! Проверьте Telegram.');
+            alert('✅ Тест пройден! Данные отправлены в Google Script.');
         } else {
-            alert('❌ Ошибка отправки. Проверьте настройки бота.');
+            alert('❌ Тест не пройден. Проверьте консоль браузера (F12).');
         }
+    } catch (error) {
+        alert('❌ Ошибка теста: ' + error.message);
     }
 }
-
